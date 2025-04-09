@@ -29,8 +29,10 @@ COPY . .
 # 현재 프로젝트를 개발 모드(-e)로 설치하여 모듈 import 문제 해결
 RUN pip install -e .
 
-# 그 외 필요한 파일 복사
-COPY langgraph.json .
+# mcp_config.json 파일이 있는지 확인 (디버깅용)
+RUN ls -la /app/src/react_agent/ && \
+    cat /app/src/react_agent/mcp_config.json || echo "mcp_config.json file not found"
+
 # .env.example 파일이 있으면 .env로 복사 (없으면 무시)
 RUN if [ -f .env.example ]; then cp .env.example .env; fi
 
