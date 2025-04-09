@@ -7,7 +7,9 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     build-essential \
     curl \
-    git && \
+    git \
+    ca-certificates \
+    openssl && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
@@ -22,6 +24,9 @@ COPY pyproject.toml .
 
 # Python 패키지 설치
 RUN pip install --no-cache-dir -r requirements.txt
+
+# HTTPS 연결 관련 패키지 설치
+RUN pip install --no-cache-dir httpx==0.27.0 urllib3==2.0.7 requests==2.31.0
 
 # 프로젝트 소스 코드 복사
 COPY . .
@@ -51,6 +56,7 @@ RUN python temp_test/docker_env_test.py || echo "환경 변수 테스트 실패"
 # LangSmith API 연결 검증 스크립트 실행
 COPY temp_test/validate_key.py temp_test/
 COPY temp_test/langsmith_hello_world.py temp_test/
+COPY temp_test/https_connection_test.py temp_test/
 
 # Railway는 자동으로 PORT 환경 변수를 제공합니다
 # PORT가 설정되지 않았을 경우에만 기본값 사용 (Railway는 8080 포트 사용)
@@ -70,7 +76,14 @@ ENV LANGSMITH_ENDPOINT=https://api.smith.langchain.com
 
 # LangSmith 연결 테스트 실행
 RUN python temp_test/validate_key.py || echo "LangSmith API 키 검증 실패"
+RUN python temp_test/https_connection_test.py || echo "HTTPS 연결 테스트 실패"
 RUN python temp_test/langsmith_hello_world.py || echo "LangSmith Hello World 테스트 실패"
+
+# SSL/TLS 설정
+ENV CURL_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+ENV REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+ENV SSL_CERT_DIR=/etc/ssl/certs
+ENV PYTHONHTTPSVERIFY=1
 
 # 포트 노출 - Railway가 제공하는 PORT 사용
 EXPOSE ${PORT}
