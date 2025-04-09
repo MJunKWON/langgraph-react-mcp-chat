@@ -31,11 +31,12 @@ COPY langgraph.json .
 # .env.example 파일이 있으면 .env로 복사 (없으면 무시)
 RUN if [ -f .env.example ]; then cp .env.example .env; fi
 
-# 환경 변수 설정
-ENV PORT=2024
+# Railway는 자동으로 PORT 환경 변수를 제공합니다
+# PORT가 설정되지 않았을 경우에만 기본값 사용 (Railway는 8080 포트 사용)
+ENV PORT=${PORT:-8080}
 ENV HOST=0.0.0.0
 
-# 포트 노출
+# 포트 노출 - Railway가 제공하는 PORT 사용
 EXPOSE ${PORT}
 
 # 서버 실행
