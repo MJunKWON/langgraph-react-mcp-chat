@@ -35,7 +35,7 @@ def check_api_keys():
     # API 키 마스킹하여 출력 (보안을 위해 첫 8자와 마지막 4자만 표시)
     def mask_key(key):
         if key and len(key) > 12:
-            return f"{key[:8]}...{key[-4:]}"
+            return f"{key[:4]}...{key[-4:]}"
         elif key == "없음":
             return "없음"
         else:
@@ -69,6 +69,18 @@ def check_api_keys():
     if anthropic_api_key == "없음" or anthropic_api_key.startswith("your_") or anthropic_api_key == "sk-ant-api03":
         print("⚠️ Anthropic API 키가 설정되지 않았습니다. 환경 변수를 확인하세요.")
         is_valid = False
+        
+    # 실행 환경 변수 목록 출력
+    print("\n===== 환경 변수 디버깅 =====")
+    print("Railway TOML 변수 사용 여부 확인:")
+    for key in sorted(os.environ.keys()):
+        if key in ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'LANGSMITH_API_KEY', 'LANGSMITH_ENDPOINT', 'PORT', 'HOST']:
+            value = os.environ.get(key)
+            if key.endswith('_KEY') and value:
+                # API 키 마스킹 처리
+                value = f"{value[:4]}...{value[-4:]}" if len(value) > 8 else "***"
+            print(f"  {key}: {value}")
+    print("============================\n")
     
     # LangSmith 키가 없거나 트레이싱이 비활성화된 경우 환경 변수 비활성화
     if langsmith_api_key == "없음" or langsmith_api_key.startswith("your_") or not tracing_enabled:
