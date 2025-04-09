@@ -40,9 +40,14 @@ RUN if [ -f .env.example ]; then cp .env.example .env; fi
 # PORT가 설정되지 않았을 경우에만 기본값 사용 (Railway는 8080 포트 사용)
 ENV PORT=${PORT:-8080}
 ENV HOST=0.0.0.0
+# API 변형 설정 - 프로덕션 모드로 실행
+ENV API_VARIANT=production
+# LangSmith 트레이싱 비활성화
+ENV LANGCHAIN_TRACING_V2=false
+ENV LANGSMITH_TRACING=false
 
 # 포트 노출 - Railway가 제공하는 PORT 사용
 EXPOSE ${PORT}
 
-# 서버 실행
-CMD langgraph dev --host ${HOST} --port ${PORT} 
+# 서버 실행 (프로덕션 모드)
+CMD langgraph dev --host ${HOST} --port ${PORT} --production 
