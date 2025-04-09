@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.env
+.env.local
+.venv
+venv/
+ENV/
+*.egg-info/
+
+# Git
+.git
+.gitignore
+
+# Node
+node_modules/
+
+# OS
+.DS_Store
+
+# IDEs
+.idea/
+.vscode/
+
+# Debug files
+*.log
+
+# Local development files
+.langgraph_api/ 
