@@ -25,8 +25,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # 그 외 필요한 파일 복사
 COPY src/ ./src/
-COPY .env .env
+# .env 파일은 Railway 환경 변수로 제공되므로 복사하지 않음
+# COPY .env .env
 COPY langgraph.json .
+# .env.example 파일이 있으면 .env로 복사 (없으면 무시)
+RUN if [ -f .env.example ]; then cp .env.example .env; fi
 
 # 환경 변수 설정
 ENV PORT=2024
