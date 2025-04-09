@@ -33,6 +33,15 @@ async def make_graph(mcp_tools: Dict[str, Dict[str, str]]):
         else:
             # API 키 로그 출력 (보안상 완전한 키는 출력하지 않음)
             print(f"API 키 형식 확인: {anthropic_api_key[:10]}...{anthropic_api_key[-4:]}")
+        
+        # LangSmith 환경 변수 확인
+        langsmith_api_key = os.environ.get("LANGSMITH_API_KEY")
+        langsmith_project = os.environ.get("LANGSMITH_PROJECT")
+        langsmith_endpoint = os.environ.get("LANGSMITH_ENDPOINT")
+        print(f"LangSmith 설정 확인:")
+        print(f"  - API 키: {langsmith_api_key[:10]}...{langsmith_api_key[-4:] if langsmith_api_key else '없음'}")
+        print(f"  - 프로젝트: {langsmith_project}")
+        print(f"  - 엔드포인트: {langsmith_endpoint}")
             
         model = ChatAnthropic(
             model="claude-3-7-sonnet-latest", 
