@@ -51,5 +51,5 @@ ENV LANGSMITH_PROJECT=mcptest
 # 포트 노출 - Railway가 제공하는 PORT 사용
 EXPOSE ${PORT}
 
-# 서버 실행 (프로덕션 모드)
-CMD langgraph dev --host ${HOST} --port ${PORT} --production 
+# 서버 실행
+CMD langgraph dev --host ${HOST} --port ${PORT} 
