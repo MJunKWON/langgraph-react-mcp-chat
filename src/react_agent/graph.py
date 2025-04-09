@@ -14,8 +14,10 @@ from contextlib import asynccontextmanager
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langgraph.prebuilt import create_react_agent
 from langchain_anthropic import ChatAnthropic
+from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.runnables import RunnableConfig
+import os
 
 
 memory = MemorySaver()
@@ -25,8 +27,8 @@ memory = MemorySaver()
 async def make_graph(mcp_tools: Dict[str, Dict[str, str]]):
     async with MultiServerMCPClient(mcp_tools) as client:
         model = ChatAnthropic(
-            model="claude-3-7-sonnet-latest", temperature=0.0, max_tokens=64000
-        )
+            model="claude-3-7-sonnet-latest", temperature=0.0, max_tokens=800, timeout=60.0
+        )  
         agent = create_react_agent(model, client.get_tools(), checkpointer=memory)
         yield agent
 
