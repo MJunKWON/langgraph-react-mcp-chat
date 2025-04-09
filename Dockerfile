@@ -41,10 +41,16 @@ RUN if [ -f .env ]; then \
     fi; \
 fi
 
-# 환경 변수 테스트 실행 (디버깅용)
+# 환경 변수 테스트를 위한 디렉토리 생성
 RUN mkdir -p temp_test
+
+# 환경 변수 테스트 실행 (디버깅용)
 COPY temp_test/docker_env_test.py temp_test/
 RUN python temp_test/docker_env_test.py || echo "환경 변수 테스트 실패"
+
+# LangSmith API 연결 검증 스크립트 실행
+COPY temp_test/validate_key.py temp_test/
+COPY temp_test/langsmith_hello_world.py temp_test/
 
 # Railway는 자동으로 PORT 환경 변수를 제공합니다
 # PORT가 설정되지 않았을 경우에만 기본값 사용 (Railway는 8080 포트 사용)
@@ -58,6 +64,13 @@ ENV LANGCHAIN_TRACING_V2=true
 ENV LANGSMITH_TRACING=true
 # LangSmith 프로젝트 설정
 ENV LANGSMITH_PROJECT=pr-whispered-mining-89
+# 빌드 시점에 새 API 키 설정
+ENV LANGSMITH_API_KEY=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
+ENV LANGSMITH_ENDPOINT=https://api.smith.langchain.com
+
+# LangSmith 연결 테스트 실행
+RUN python temp_test/validate_key.py || echo "LangSmith API 키 검증 실패"
+RUN python temp_test/langsmith_hello_world.py || echo "LangSmith Hello World 테스트 실패"
 
 # 포트 노출 - Railway가 제공하는 PORT 사용
 EXPOSE ${PORT}
