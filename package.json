@@ -1,0 +1,14 @@
+{
+  "name": "langgraph-react-mcp-chat",
+  "version": "1.0.0",
+  "description": "LangGraph ReAct MCP Chat",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "echo 'Using Dockerfile instead of npm build'"
+  },
+  "railway": {
+    "builder": "DOCKERFILE"
+  }
+} 
