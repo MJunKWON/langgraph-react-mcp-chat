@@ -26,8 +26,20 @@ memory = MemorySaver()
 @asynccontextmanager
 async def make_graph(mcp_tools: Dict[str, Dict[str, str]]):
     async with MultiServerMCPClient(mcp_tools) as client:
+        # API 키 명시적으로 로드 (디버깅용)
+        anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if not anthropic_api_key:
+            print("경고: ANTHROPIC_API_KEY 환경 변수가 설정되지 않았습니다!")
+        else:
+            # API 키 로그 출력 (보안상 완전한 키는 출력하지 않음)
+            print(f"API 키 형식 확인: {anthropic_api_key[:10]}...{anthropic_api_key[-4:]}")
+            
         model = ChatAnthropic(
-            model="claude-3-7-sonnet-latest", temperature=0.0, max_tokens=800, timeout=60.0
+            model="claude-3-7-sonnet-latest", 
+            temperature=0.0, 
+            max_tokens=800, 
+            timeout=60.0,
+            anthropic_api_key=anthropic_api_key  # API 키 명시적 설정
         )  
         agent = create_react_agent(model, client.get_tools(), checkpointer=memory)
         yield agent
