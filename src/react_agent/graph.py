@@ -18,73 +18,78 @@ from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.runnables import RunnableConfig
 import os
-import re
+from langsmith import Client
 
 
 memory = MemorySaver()
 
 
+# API 키 로깅 함수 추가
+def check_api_keys():
+    """환경 변수에서 API 키들이 제대로 로드되었는지 확인합니다."""
+    langsmith_api_key = os.environ.get("LANGSMITH_API_KEY", "없음")
+    langsmith_endpoint = os.environ.get("LANGSMITH_ENDPOINT", "없음")
+    anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY", "없음")
+    openai_api_key = os.environ.get("OPENAI_API_KEY", "없음")
+    
+    # API 키 마스킹하여 출력 (보안을 위해 첫 8자와 마지막 4자만 표시)
+    def mask_key(key):
+        if key and len(key) > 12:
+            return f"{key[:8]}...{key[-4:]}"
+        elif key == "없음":
+            return "없음"
+        else:
+            return "너무 짧은 키"
+    
+    print("\n===== API 키 확인 =====")
+    print(f"LANGSMITH_API_KEY: {mask_key(langsmith_api_key)}")
+    print(f"LANGSMITH_ENDPOINT: {langsmith_endpoint}")
+    print(f"ANTHROPIC_API_KEY: {mask_key(anthropic_api_key)}")
+    print(f"OPENAI_API_KEY: {mask_key(openai_api_key)}")
+    print("======================\n")
+    
+    # LangSmith 활성화 여부 확인
+    tracing_enabled = (
+        os.environ.get("LANGCHAIN_TRACING_V2", "").lower() == "true" or
+        os.environ.get("LANGSMITH_TRACING", "").lower() == "true"
+    )
+    
+    print(f"LangSmith 트레이싱 설정: {'활성화' if tracing_enabled else '비활성화'}")
+    print(f"실행 환경: {'Railway/Docker' if os.environ.get('PORT') else '로컬'}")
+    
+    # LangSmith 키가 없거나 트레이싱이 비활성화된 경우 환경 변수 비활성화
+    if langsmith_api_key == "없음" or not tracing_enabled:
+        print("LangSmith 트레이싱 비활성화 (API 키 없음 또는 트레이싱 설정 꺼짐)")
+        os.environ["LANGCHAIN_TRACING_V2"] = "false"
+        os.environ["LANGSMITH_TRACING"] = "false"
+    else:
+        # LangSmith 클라이언트 테스트
+        try:
+            # 모듈이 있는지 확인
+            try:
+                from langsmith import Client
+            except ImportError:
+                print("LangSmith 라이브러리가 설치되지 않았습니다. 트레이싱 비활성화.")
+                os.environ["LANGCHAIN_TRACING_V2"] = "false"
+                os.environ["LANGSMITH_TRACING"] = "false"
+                return
+
+            client = Client()
+            projects = list(client.list_projects())
+            print(f"LangSmith 연결 성공! 프로젝트 {len(projects)}개 조회됨")
+        except Exception as e:
+            print(f"LangSmith 연결 실패: {e}")
+            print("LangSmith 트레이싱 비활성화 (API 연결 실패)")
+            os.environ["LANGCHAIN_TRACING_V2"] = "false"
+            os.environ["LANGSMITH_TRACING"] = "false"
+
+
 @asynccontextmanager
 async def make_graph(mcp_tools: Dict[str, Dict[str, str]]):
     async with MultiServerMCPClient(mcp_tools) as client:
-        # API 키 명시적으로 로드 (디버깅용)
-        anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-        
-        # API 키 정리 (앞뒤 공백 및 따옴표 제거)
-        anthropic_api_key = anthropic_api_key.strip().strip('"\'')
-        
-        if not anthropic_api_key:
-            print("경고: ANTHROPIC_API_KEY 환경 변수가 설정되지 않았습니다!")
-        else:
-            # API 키 형식 유효성 검사
-            if re.match(r'^sk-ant-api\d+-[A-Za-z0-9_-]+$', anthropic_api_key):
-                print(f"API 키 형식 확인 (유효): {anthropic_api_key[:10]}...{anthropic_api_key[-4:]}")
-            else:
-                print(f"경고: API 키 형식이 유효하지 않습니다: {anthropic_api_key[:10]}...")
-        
-        # LangSmith 환경 변수 확인
-        langsmith_api_key = os.environ.get("LANGSMITH_API_KEY", "")
-        langsmith_project = os.environ.get("LANGSMITH_PROJECT")
-        langsmith_endpoint = os.environ.get("LANGSMITH_ENDPOINT")
-        print(f"LangSmith 설정 확인:")
-        print(f"  - API 키: {langsmith_api_key[:10]}...{langsmith_api_key[-4:] if langsmith_api_key else '없음'}")
-        print(f"  - 프로젝트: {langsmith_project}")
-        print(f"  - 엔드포인트: {langsmith_endpoint}")
-        print(f"  - 트레이싱: {os.environ.get('LANGSMITH_TRACING', 'false')}")
-        
-        try:
-            model = ChatAnthropic(
-                model="claude-3-7-sonnet-latest", 
-                temperature=0.0, 
-                max_tokens=800, 
-                timeout=60.0,
-                anthropic_api_key=anthropic_api_key  # API 키 명시적 설정
-            )
-        except Exception as e:
-            print(f"Anthropic 모델 초기화 오류: {e}")
-            # 폴백: 모델 초기화 오류 시 간단한 에코 함수로 대체
-            from langchain_core.language_models.chat_models import BaseChatModel
-            
-            class EchoModel(BaseChatModel):
-                def _generate(self, messages, stop=None, run_manager=None, **kwargs):
-                    from langchain_core.messages import AIMessage
-                    from langchain_core.outputs import ChatGeneration, ChatResult
-                    
-                    return ChatResult(generations=[
-                        ChatGeneration(message=AIMessage(content="API 키 인증 오류로 인해 응답할 수 없습니다. 관리자에게 문의하세요."))
-                    ])
-                
-                async def _agenerate(self, messages, stop=None, run_manager=None, **kwargs):
-                    from langchain_core.messages import AIMessage
-                    from langchain_core.outputs import ChatGeneration, ChatResult
-                    
-                    return ChatResult(generations=[
-                        ChatGeneration(message=AIMessage(content="API 키 인증 오류로 인해 응답할 수 없습니다. 관리자에게 문의하세요."))
-                    ])
-            
-            print("경고: 에코 모델로 폴백합니다 (실제 AI 응답이 아님).")
-            model = EchoModel()
-        
+        model = ChatAnthropic(
+            model="claude-3-7-sonnet", temperature=0.0, max_tokens=800, timeout=60.0
+        )  
         agent = create_react_agent(model, client.get_tools(), checkpointer=memory)
         yield agent
 
@@ -103,6 +108,9 @@ async def call_model(
     Returns:
         dict: A dictionary containing the model's response message.
     """
+    # API 키 확인
+    check_api_keys()
+    
     configuration = Configuration.from_runnable_config(config)
 
     # Format the system prompt. Customize this to change the agent's behavior.

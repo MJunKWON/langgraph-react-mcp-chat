@@ -29,24 +29,35 @@ COPY . .
 # 현재 프로젝트를 개발 모드(-e)로 설치하여 모듈 import 문제 해결
 RUN pip install -e .
 
-# mcp_config.json 파일이 있는지 확인 (디버깅용)
-RUN ls -la /app/src/react_agent/ && \
-    cat /app/src/react_agent/mcp_config.json || echo "mcp_config.json file not found"
+# .env 파일이 있으면 복사하고, 없으면 .env.example에서 생성
+RUN if [ -f .env ]; then \
+    echo "Using existing .env file"; \
+    else \
+    if [ -f .env.example ]; then \
+        echo "Creating .env from .env.example"; \
+        cp .env.example .env; \
+    else \
+        echo "Warning: No .env or .env.example file found"; \
+    fi; \
+fi
 
-# .env.example 파일이 있으면 .env로 복사 (없으면 무시)
-RUN if [ -f .env.example ]; then cp .env.example .env; fi
+# 환경 변수 테스트 실행 (디버깅용)
+RUN mkdir -p temp_test
+COPY temp_test/docker_env_test.py temp_test/
+RUN python temp_test/docker_env_test.py || echo "환경 변수 테스트 실패"
 
 # Railway는 자동으로 PORT 환경 변수를 제공합니다
 # PORT가 설정되지 않았을 경우에만 기본값 사용 (Railway는 8080 포트 사용)
 ENV PORT=${PORT:-8080}
 ENV HOST=0.0.0.0
-# API 변형 설정 - 프로덕션 모드로 실행
+# API 변형 설정 - 프로덕션 모드로 실행 (중요: 빌드 시점에 명시적으로 설정)
 ENV API_VARIANT=production
-# LangSmith 트레이싱 활성화 (LangSmith UI 접속을 위해 필요)
+
+# LangSmith 트레이싱 활성화 (API 키 문제 해결됨)
 ENV LANGCHAIN_TRACING_V2=true
 ENV LANGSMITH_TRACING=true
-# LangSmith 기본 프로젝트 설정
-ENV LANGSMITH_PROJECT=mcptest
+# LangSmith 프로젝트 설정
+ENV LANGSMITH_PROJECT=pr-whispered-mining-89
 
 # 포트 노출 - Railway가 제공하는 PORT 사용
 EXPOSE ${PORT}
