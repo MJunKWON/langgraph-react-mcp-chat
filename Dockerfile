@@ -40,6 +40,8 @@ RUN if [ -f .env.example ]; then cp .env.example .env; fi
 # PORT가 설정되지 않았을 경우에만 기본값 사용 (Railway는 8080 포트 사용)
 ENV PORT=${PORT:-8080}
 ENV HOST=0.0.0.0
+# 사용할 모델 설정 - Claude 모델 사용
+ENV USE_MODEL=claude-3-7-sonnet-latest
 
 # 포트 노출 - Railway가 제공하는 PORT 사용
 EXPOSE ${PORT}
