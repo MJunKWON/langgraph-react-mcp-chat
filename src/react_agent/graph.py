@@ -57,8 +57,21 @@ def check_api_keys():
     print(f"LangSmith 트레이싱 설정: {'활성화' if tracing_enabled else '비활성화'}")
     print(f"실행 환경: {'Railway/Docker' if os.environ.get('PORT') else '로컬'}")
     
+    # API 키 유효성 검사 및 환경 설정
+    is_valid = True
+    
+    # OpenAI API 키 검사
+    if openai_api_key == "없음" or openai_api_key.startswith("your_") or openai_api_key == "sk-":
+        print("⚠️ OpenAI API 키가 설정되지 않았습니다. 환경 변수를 확인하세요.")
+        is_valid = False
+    
+    # Anthropic API 키 검사
+    if anthropic_api_key == "없음" or anthropic_api_key.startswith("your_") or anthropic_api_key == "sk-ant-api03":
+        print("⚠️ Anthropic API 키가 설정되지 않았습니다. 환경 변수를 확인하세요.")
+        is_valid = False
+    
     # LangSmith 키가 없거나 트레이싱이 비활성화된 경우 환경 변수 비활성화
-    if langsmith_api_key == "없음" or not tracing_enabled:
+    if langsmith_api_key == "없음" or langsmith_api_key.startswith("your_") or not tracing_enabled:
         print("LangSmith 트레이싱 비활성화 (API 키 없음 또는 트레이싱 설정 꺼짐)")
         os.environ["LANGCHAIN_TRACING_V2"] = "false"
         os.environ["LANGSMITH_TRACING"] = "false"
@@ -74,7 +87,22 @@ def check_api_keys():
                 os.environ["LANGSMITH_TRACING"] = "false"
                 return
 
-            client = Client()
+            # 연결 타임아웃 설정
+            import requests
+            from requests.adapters import HTTPAdapter, Retry
+            
+            session = requests.Session()
+            retry_strategy = Retry(
+                total=3,
+                backoff_factor=0.5,
+                status_forcelist=[429, 500, 502, 503, 504],
+            )
+            adapter = HTTPAdapter(max_retries=retry_strategy)
+            session.mount("http://", adapter)
+            session.mount("https://", adapter)
+            
+            # Client 초기화 시 커스텀 세션 사용
+            client = Client(request_timeout=30, session=session)
             projects = list(client.list_projects())
             print(f"LangSmith 연결 성공! 프로젝트 {len(projects)}개 조회됨")
         except Exception as e:
@@ -87,9 +115,39 @@ def check_api_keys():
 @asynccontextmanager
 async def make_graph(mcp_tools: Dict[str, Dict[str, str]]):
     async with MultiServerMCPClient(mcp_tools) as client:
-        model = ChatAnthropic(
-            model="claude-3-7-sonnet", temperature=0.0, max_tokens=800, timeout=60.0
-        )  
+        # 모델 초기화 시 적절한 타임아웃 설정
+        try:
+            # 기본 모델은 Anthropic으로 시도
+            model = ChatAnthropic(
+                model="claude-3-7-sonnet", 
+                temperature=0.0, 
+                max_tokens=800, 
+                timeout=60.0,
+                api_key=os.environ.get("ANTHROPIC_API_KEY")
+            )
+        except Exception as e:
+            print(f"Anthropic 모델 초기화 실패: {e}")
+            print("OpenAI 모델로 대체합니다.")
+            try:
+                # 대체 모델로 OpenAI 사용
+                model = ChatOpenAI(
+                    model="gpt-4-turbo", 
+                    temperature=0.0, 
+                    max_tokens=800,
+                    timeout=60.0,
+                    api_key=os.environ.get("OPENAI_API_KEY")
+                )
+            except Exception as e2:
+                print(f"OpenAI 모델 초기화 실패: {e2}")
+                # 최종 대체 모델
+                model = ChatAnthropic(
+                    model="claude-3-haiku-20240307",
+                    temperature=0.0,
+                    max_tokens=800,
+                    timeout=60.0,
+                    api_key=os.environ.get("ANTHROPIC_API_KEY")
+                )
+        
         agent = create_react_agent(model, client.get_tools(), checkpointer=memory)
         yield agent
 
