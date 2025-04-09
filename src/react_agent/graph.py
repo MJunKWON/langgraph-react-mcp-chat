@@ -19,6 +19,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.runnables import RunnableConfig
 import os
 from langsmith import Client
+from react_agent.api_keys import get_api_key, print_api_key_status, validate_api_keys
 
 
 memory = MemorySaver()
@@ -27,26 +28,15 @@ memory = MemorySaver()
 # API 키 로깅 함수 추가
 def check_api_keys():
     """환경 변수에서 API 키들이 제대로 로드되었는지 확인합니다."""
-    langsmith_api_key = os.environ.get("LANGSMITH_API_KEY", "없음")
-    langsmith_endpoint = os.environ.get("LANGSMITH_ENDPOINT", "없음")
-    anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY", "없음")
-    openai_api_key = os.environ.get("OPENAI_API_KEY", "없음")
+    print_api_key_status()
     
-    # API 키 마스킹하여 출력 (보안을 위해 첫 8자와 마지막 4자만 표시)
-    def mask_key(key):
-        if key and len(key) > 12:
-            return f"{key[:4]}...{key[-4:]}"
-        elif key == "없음":
-            return "없음"
-        else:
-            return "너무 짧은 키"
+    # API 키 검증 및 환경 변수 설정
+    validation = validate_api_keys()
     
-    print("\n===== API 키 확인 =====")
-    print(f"LANGSMITH_API_KEY: {mask_key(langsmith_api_key)}")
-    print(f"LANGSMITH_ENDPOINT: {langsmith_endpoint}")
-    print(f"ANTHROPIC_API_KEY: {mask_key(anthropic_api_key)}")
-    print(f"OPENAI_API_KEY: {mask_key(openai_api_key)}")
-    print("======================\n")
+    # 환경 변수에 API 키 설정 (외부 모듈에서 가져옴)
+    os.environ["OPENAI_API_KEY"] = get_api_key("OPENAI_API_KEY") or ""
+    os.environ["ANTHROPIC_API_KEY"] = get_api_key("ANTHROPIC_API_KEY") or ""
+    os.environ["LANGSMITH_API_KEY"] = get_api_key("LANGSMITH_API_KEY") or ""
     
     # LangSmith 활성화 여부 확인
     tracing_enabled = (
@@ -57,19 +47,6 @@ def check_api_keys():
     print(f"LangSmith 트레이싱 설정: {'활성화' if tracing_enabled else '비활성화'}")
     print(f"실행 환경: {'Railway/Docker' if os.environ.get('PORT') else '로컬'}")
     
-    # API 키 유효성 검사 및 환경 설정
-    is_valid = True
-    
-    # OpenAI API 키 검사
-    if openai_api_key == "없음" or openai_api_key.startswith("your_") or openai_api_key == "sk-":
-        print("⚠️ OpenAI API 키가 설정되지 않았습니다. 환경 변수를 확인하세요.")
-        is_valid = False
-    
-    # Anthropic API 키 검사
-    if anthropic_api_key == "없음" or anthropic_api_key.startswith("your_") or anthropic_api_key == "sk-ant-api03":
-        print("⚠️ Anthropic API 키가 설정되지 않았습니다. 환경 변수를 확인하세요.")
-        is_valid = False
-        
     # 실행 환경 변수 목록 출력
     print("\n===== 환경 변수 디버깅 =====")
     print("Railway TOML 변수 사용 여부 확인:")
@@ -83,7 +60,7 @@ def check_api_keys():
     print("============================\n")
     
     # LangSmith 키가 없거나 트레이싱이 비활성화된 경우 환경 변수 비활성화
-    if langsmith_api_key == "없음" or langsmith_api_key.startswith("your_") or not tracing_enabled:
+    if not validation["langsmith"] or not tracing_enabled:
         print("LangSmith 트레이싱 비활성화 (API 키 없음 또는 트레이싱 설정 꺼짐)")
         os.environ["LANGCHAIN_TRACING_V2"] = "false"
         os.environ["LANGSMITH_TRACING"] = "false"
@@ -127,6 +104,10 @@ def check_api_keys():
 @asynccontextmanager
 async def make_graph(mcp_tools: Dict[str, Dict[str, str]]):
     async with MultiServerMCPClient(mcp_tools) as client:
+        # API 키 가져오기
+        anthropic_api_key = get_api_key("ANTHROPIC_API_KEY")
+        openai_api_key = get_api_key("OPENAI_API_KEY")
+        
         # 모델 초기화 시 적절한 타임아웃 설정
         try:
             # 기본 모델은 Anthropic으로 시도
@@ -135,8 +116,9 @@ async def make_graph(mcp_tools: Dict[str, Dict[str, str]]):
                 temperature=0.0, 
                 max_tokens=800, 
                 timeout=60.0,
-                api_key=os.environ.get("ANTHROPIC_API_KEY")
+                api_key=anthropic_api_key
             )
+            print("✅ Anthropic 모델 초기화 성공: claude-3-7-sonnet")
         except Exception as e:
             print(f"Anthropic 모델 초기화 실패: {e}")
             print("OpenAI 모델로 대체합니다.")
@@ -147,18 +129,25 @@ async def make_graph(mcp_tools: Dict[str, Dict[str, str]]):
                     temperature=0.0, 
                     max_tokens=800,
                     timeout=60.0,
-                    api_key=os.environ.get("OPENAI_API_KEY")
+                    api_key=openai_api_key
                 )
+                print("✅ OpenAI 모델 초기화 성공: gpt-4-turbo")
             except Exception as e2:
                 print(f"OpenAI 모델 초기화 실패: {e2}")
-                # 최종 대체 모델
-                model = ChatAnthropic(
-                    model="claude-3-haiku-20240307",
-                    temperature=0.0,
-                    max_tokens=800,
-                    timeout=60.0,
-                    api_key=os.environ.get("ANTHROPIC_API_KEY")
-                )
+                print("더 작은 Anthropic 모델로 대체합니다.")
+                try:
+                    # 최종 대체 모델
+                    model = ChatAnthropic(
+                        model="claude-3-haiku-20240307",
+                        temperature=0.0,
+                        max_tokens=800,
+                        timeout=60.0,
+                        api_key=anthropic_api_key
+                    )
+                    print("✅ Anthropic 대체 모델 초기화 성공: claude-3-haiku")
+                except Exception as e3:
+                    print(f"모든 모델 초기화 실패: {e3}")
+                    raise RuntimeError("사용 가능한 LLM 모델이 없습니다. API 키를 확인하세요.")
         
         agent = create_react_agent(model, client.get_tools(), checkpointer=memory)
         yield agent
