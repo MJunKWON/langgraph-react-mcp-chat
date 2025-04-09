@@ -50,11 +50,7 @@ async def make_graph(mcp_tools: Dict[str, Dict[str, str]]):
         print(f"  - API 키: {langsmith_api_key[:10]}...{langsmith_api_key[-4:] if langsmith_api_key else '없음'}")
         print(f"  - 프로젝트: {langsmith_project}")
         print(f"  - 엔드포인트: {langsmith_endpoint}")
-        
-        # LangSmith 트레이싱 비활성화 (403 오류 해결)
-        os.environ["LANGCHAIN_TRACING_V2"] = "false"
-        os.environ["LANGSMITH_TRACING"] = "false"
-        print("LangSmith 트레이싱이 비활성화되었습니다 (403 오류 해결)")
+        print(f"  - 트레이싱: {os.environ.get('LANGSMITH_TRACING', 'false')}")
         
         try:
             model = ChatAnthropic(
