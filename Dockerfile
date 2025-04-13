@@ -37,16 +37,20 @@ COPY . .
 # 현재 프로젝트를 개발 모드(-e)로 설치하여 모듈 import 문제 해결
 RUN pip install -e .
 
-# 환경 변수 설정 (.env 파일이 없으면 .env.example 파일을 사용)
+# 환경 변수 파일 확인
+RUN echo "🔍 환경 변수 파일 확인 중..."
 RUN if [ -f .env ]; then \
-      echo "Using existing .env file"; \
-    elif [ -f .env.example ]; then \
-      echo "No .env file found. Creating from .env.example"; \
-      cp .env.example .env; \
-    else \
-      echo "Warning: Neither .env nor .env.example found. Using default environment variables."; \
-    fi
+    echo "✅ 기존 .env 파일을 사용합니다."; \
+elif [ -f .env.example ]; then \
+    echo "📝 .env.example에서 .env 파일을 생성합니다."; \
+    cp .env.example .env; \
+else \
+    echo "⚠️ .env 또는 .env.example 파일이 없습니다! 기본 환경 변수를 생성합니다."; \
+    echo "OPENAI_API_KEY=YOUR_OPENAI_API_KEY\nANTHROPIC_API_KEY=YOUR_ANTHROPIC_API_KEY" > .env; \
+fi
 
+# 환경 변수 설정
+RUN echo "🔧 환경 변수를 로드합니다..."
 # 환경 변수 테스트를 위한 디렉토리 생성
 RUN mkdir -p temp_test
 
@@ -73,12 +77,12 @@ ENV LANGSMITH_TRACING=true
 # LangSmith 프로젝트 설정
 ENV LANGSMITH_PROJECT=pr-whispered-mining-89
 # 빌드 시점에 새 API 키 설정
-ENV LANGSMITH_API_KEY=${LANGSMITH_API_KEY:-""}
+ENV LANGSMITH_API_KEY=${LANGSMITH_API_KEY:-"YOUR_LANGSMITH_API_KEY"}
 ENV LANGSMITH_ENDPOINT=https://api.smith.langchain.com
 
 # API 키 설정
-ENV OPENAI_API_KEY=${OPENAI_API_KEY:-""}
-ENV ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-""}
+ENV OPENAI_API_KEY=${OPENAI_API_KEY:-"YOUR_OPENAI_API_KEY"}
+ENV ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-"YOUR_ANTHROPIC_API_KEY"}
 
 # 네트워크 타임아웃 설정 증가
 ENV REQUESTS_TIMEOUT=60

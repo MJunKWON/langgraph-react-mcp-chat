@@ -19,47 +19,57 @@ from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.runnables import RunnableConfig
 import os
 from langsmith import Client
-from react_agent.api_keys import get_api_key, print_api_key_status, validate_api_keys, test_langsmith_connection
+from react_agent.api_keys import get_api_key, check_and_display_api_keys, mask_api_key, is_valid_openai_key, is_valid_anthropic_key
+from .utils import get_llm
+import logging
 
 
 memory = MemorySaver()
 
 
-# API 키 로깅 함수 추가
+# 로깅 설정
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+
 def check_api_keys():
-    """환경 변수에서 API 키들이 제대로 로드되었는지 확인합니다."""
-    print_api_key_status()
+    """환경 변수에서 API 키가 올바르게 로드되었는지 확인하고 상태를 출력합니다."""
+    openai_key = os.environ.get("OPENAI_API_KEY", "")
+    anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "")
     
-    # API 키 검증 및 환경 변수 설정
-    validation = validate_api_keys()
+    # API 키 마스킹 (보안을 위해 일부만 표시)
+    masked_openai = mask_api_key(openai_key)
+    masked_anthropic = mask_api_key(anthropic_key)
     
-    # 환경 변수에 API 키 설정 (외부 모듈에서 가져옴)
-    os.environ["OPENAI_API_KEY"] = get_api_key("OPENAI_API_KEY") or ""
-    os.environ["ANTHROPIC_API_KEY"] = get_api_key("ANTHROPIC_API_KEY") or ""
-    os.environ["LANGSMITH_API_KEY"] = get_api_key("LANGSMITH_API_KEY") or ""
+    # 키 유효성 검사
+    openai_valid = is_valid_openai_key(openai_key)
+    anthropic_valid = is_valid_anthropic_key(anthropic_key)
     
-    # LangSmith 트레이싱 설정 확인 및 연결 테스트
-    test_langsmith_connection()
+    # 상태 로깅
+    logger.info("===== API 키 상태 =====")
+    logger.info(f"OpenAI API 키: {masked_openai} - {'유효함 ✅' if openai_valid else '유효하지 않음 ❌'}")
+    logger.info(f"Anthropic API 키: {masked_anthropic} - {'유효함 ✅' if anthropic_valid else '유효하지 않음 ❌'}")
+    logger.info("======================")
     
-    print(f"실행 환경: {'Railway/Docker' if os.environ.get('PORT') else '로컬'}")
+    if not openai_valid:
+        logger.warning("OpenAI API 키가 유효하지 않습니다. 환경 변수를 확인하세요.")
     
-    # 실행 환경 변수 목록 출력
-    print("\n===== 환경 변수 디버깅 =====")
-    print("Railway TOML 변수 사용 여부 확인:")
-    for key in sorted(os.environ.keys()):
-        if key in ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'LANGSMITH_API_KEY', 'LANGSMITH_ENDPOINT', 'PORT', 'HOST']:
-            value = os.environ.get(key)
-            if key.endswith('_KEY') and value:
-                # API 키 마스킹 처리
-                value = f"{value[:4]}...{value[-4:]}" if len(value) > 8 else "***"
-            print(f"  {key}: {value}")
-    print("============================\n")
+    if not anthropic_valid:
+        logger.warning("Anthropic API 키가 유효하지 않습니다. 환경 변수를 확인하세요.")
     
-    # LangSmith 키가 없거나 트레이싱이 비활성화된 경우 환경 변수 비활성화
-    if not validation["langsmith"]:
-        print("LangSmith 트레이싱 비활성화 (API 키 없음)")
-        os.environ["LANGCHAIN_TRACING_V2"] = "false"
-        os.environ["LANGSMITH_TRACING"] = "false"
+    # 사용 가능한 모델 표시
+    available_models = []
+    if openai_valid:
+        available_models.append("OpenAI (gpt-4-turbo)")
+    if anthropic_valid:
+        available_models.append("Anthropic (claude-3-7-sonnet, claude-3-haiku)")
+    
+    if available_models:
+        logger.info(f"사용 가능한 모델: {', '.join(available_models)}")
+    else:
+        logger.warning("사용 가능한 모델이 없습니다. API 키를 확인하세요.")
+    
+    return openai_valid, anthropic_valid
 
 
 @asynccontextmanager
@@ -234,3 +244,21 @@ graph = builder.compile(
     interrupt_after=[],  # Add node names here to update state after they're called
 )
 graph.name = "ReAct Agent"  # This customizes the name in LangSmith
+
+def main():
+    """메인 함수입니다."""
+    # 로깅 설정
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    
+    # API 키 체크 및 표시
+    check_and_display_api_keys()
+    
+    # 기존 실행 부분
+    port = int(os.getenv("PORT", "8000"))
+    host = os.getenv("HOST", "127.0.0.1")
+    
+    print(f"\n🚀 LangGraph React MCP 에이전트 서버 시작 중...")
+    print(f"📝 OpenAPI 문서: http://{host}:{port}/docs")
+    print(f"🔗 서버 URL: http://{host}:{port}")
+    print(f"🌐 서버가 {host}:{port}에서 실행 중입니다.")
+    print(f"🛑 종료하려면 Ctrl+C를 누르세요.")
