@@ -113,4 +113,120 @@ def print_api_key_status() -> None:
         status = "✅ 유효함" if valid else "❌ 유효하지 않음"
         print(f"{name.upper()}: {status}")
     
-    print("======================\n") 
+    print("======================\n")
+
+
+def get_langsmith_project() -> str:
+    """LangSmith 프로젝트 이름을 가져옵니다."""
+    # 환경 변수에서 프로젝트 이름 가져오기
+    project = os.environ.get("LANGSMITH_PROJECT")
+    if project:
+        return project
+    
+    # 기본 프로젝트 이름
+    return "langgraph-react-mcp-chat"
+
+
+def setup_langsmith():
+    """LangSmith 관련 설정을 진행합니다."""
+    # LangSmith API 키 가져오기
+    langsmith_key = get_api_key("LANGSMITH_API_KEY")
+    
+    # 키가 없거나 자리 표시자면 트레이싱 비활성화
+    if not langsmith_key or langsmith_key.startswith("lsv2-placeholder"):
+        print("⚠️ 유효한 LangSmith API 키가 없어 트레이싱이 비활성화됩니다.")
+        os.environ["LANGCHAIN_TRACING_V2"] = "false"
+        os.environ["LANGSMITH_TRACING"] = "false"
+        return False
+    
+    # 환경 변수 설정
+    os.environ["LANGSMITH_API_KEY"] = langsmith_key
+    os.environ["LANGSMITH_ENDPOINT"] = os.environ.get("LANGSMITH_ENDPOINT", "https://api.smith.langchain.com")
+    os.environ["LANGSMITH_PROJECT"] = get_langsmith_project()
+    
+    # 트레이싱 활성화 설정
+    tracing_enabled = (
+        os.environ.get("LANGCHAIN_TRACING_V2", "").lower() == "true" or
+        os.environ.get("LANGSMITH_TRACING", "").lower() == "true"
+    )
+    
+    if tracing_enabled:
+        print(f"✅ LangSmith 트레이싱 활성화: {os.environ.get('LANGSMITH_PROJECT')}")
+        os.environ["LANGCHAIN_TRACING_V2"] = "true"
+        os.environ["LANGSMITH_TRACING"] = "true"
+        return True
+    else:
+        print("⚠️ LangSmith 트레이싱이 설정에서 비활성화되어 있습니다.")
+        os.environ["LANGCHAIN_TRACING_V2"] = "false"
+        os.environ["LANGSMITH_TRACING"] = "false"
+        return False
+
+
+def test_langsmith_connection() -> bool:
+    """LangSmith 연결을 테스트합니다."""
+    if not setup_langsmith():
+        return False
+        
+    try:
+        from langsmith import Client
+        import requests
+        from requests.adapters import HTTPAdapter, Retry
+        
+        # 연결 타임아웃 설정
+        session = requests.Session()
+        retry_strategy = Retry(
+            total=3,
+            backoff_factor=0.5,
+            status_forcelist=[429, 500, 502, 503, 504],
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+        
+        # LangSmith 클라이언트 생성
+        client = Client(
+            api_key=get_api_key("LANGSMITH_API_KEY"),
+            api_url=os.environ.get("LANGSMITH_ENDPOINT", "https://api.smith.langchain.com"),
+            timeout_ms=30000,  # 30초 타임아웃
+        )
+        
+        # 프로젝트 리스트 조회 시도
+        try:
+            projects = list(client.list_projects())
+            print(f"✅ LangSmith 연결 성공! 프로젝트 {len(projects)}개 조회됨")
+            return True
+        except Exception as e:
+            print(f"⚠️ LangSmith 프로젝트 조회 실패: {e}")
+            
+        # 다른 API 호출 시도 (테넌트 정보)
+        try:
+            headers = {
+                "accept": "application/json",
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {get_api_key('LANGSMITH_API_KEY')}"
+            }
+            response = session.get(
+                f"{os.environ.get('LANGSMITH_ENDPOINT', 'https://api.smith.langchain.com')}/tenants/pending",
+                headers=headers
+            )
+            print(f"테넌트 정보 조회: {response.status_code} {response.reason}")
+            if response.status_code == 200:
+                return True
+        except Exception as e:
+            print(f"⚠️ LangSmith 테넌트 정보 조회 실패: {e}")
+            
+        # 모든 시도 실패
+        print("⚠️ LangSmith 연결 테스트 실패. 트레이싱이 비활성화됩니다.")
+        os.environ["LANGCHAIN_TRACING_V2"] = "false"
+        os.environ["LANGSMITH_TRACING"] = "false"
+        return False
+    except ImportError:
+        print("⚠️ LangSmith 라이브러리가 설치되지 않았습니다. 트레이싱이 비활성화됩니다.")
+        os.environ["LANGCHAIN_TRACING_V2"] = "false"
+        os.environ["LANGSMITH_TRACING"] = "false"
+        return False
+    except Exception as e:
+        print(f"⚠️ LangSmith 연결 테스트 중 오류 발생: {e}")
+        os.environ["LANGCHAIN_TRACING_V2"] = "false"
+        os.environ["LANGSMITH_TRACING"] = "false"
+        return False 

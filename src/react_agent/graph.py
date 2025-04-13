@@ -19,7 +19,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.runnables import RunnableConfig
 import os
 from langsmith import Client
-from react_agent.api_keys import get_api_key, print_api_key_status, validate_api_keys
+from react_agent.api_keys import get_api_key, print_api_key_status, validate_api_keys, test_langsmith_connection
 
 
 memory = MemorySaver()
@@ -38,13 +38,9 @@ def check_api_keys():
     os.environ["ANTHROPIC_API_KEY"] = get_api_key("ANTHROPIC_API_KEY") or ""
     os.environ["LANGSMITH_API_KEY"] = get_api_key("LANGSMITH_API_KEY") or ""
     
-    # LangSmith 활성화 여부 확인
-    tracing_enabled = (
-        os.environ.get("LANGCHAIN_TRACING_V2", "").lower() == "true" or
-        os.environ.get("LANGSMITH_TRACING", "").lower() == "true"
-    )
+    # LangSmith 트레이싱 설정 확인 및 연결 테스트
+    test_langsmith_connection()
     
-    print(f"LangSmith 트레이싱 설정: {'활성화' if tracing_enabled else '비활성화'}")
     print(f"실행 환경: {'Railway/Docker' if os.environ.get('PORT') else '로컬'}")
     
     # 실행 환경 변수 목록 출력
@@ -60,45 +56,10 @@ def check_api_keys():
     print("============================\n")
     
     # LangSmith 키가 없거나 트레이싱이 비활성화된 경우 환경 변수 비활성화
-    if not validation["langsmith"] or not tracing_enabled:
-        print("LangSmith 트레이싱 비활성화 (API 키 없음 또는 트레이싱 설정 꺼짐)")
+    if not validation["langsmith"]:
+        print("LangSmith 트레이싱 비활성화 (API 키 없음)")
         os.environ["LANGCHAIN_TRACING_V2"] = "false"
         os.environ["LANGSMITH_TRACING"] = "false"
-    else:
-        # LangSmith 클라이언트 테스트
-        try:
-            # 모듈이 있는지 확인
-            try:
-                from langsmith import Client
-            except ImportError:
-                print("LangSmith 라이브러리가 설치되지 않았습니다. 트레이싱 비활성화.")
-                os.environ["LANGCHAIN_TRACING_V2"] = "false"
-                os.environ["LANGSMITH_TRACING"] = "false"
-                return
-
-            # 연결 타임아웃 설정
-            import requests
-            from requests.adapters import HTTPAdapter, Retry
-            
-            session = requests.Session()
-            retry_strategy = Retry(
-                total=3,
-                backoff_factor=0.5,
-                status_forcelist=[429, 500, 502, 503, 504],
-            )
-            adapter = HTTPAdapter(max_retries=retry_strategy)
-            session.mount("http://", adapter)
-            session.mount("https://", adapter)
-            
-            # Client 초기화 시 커스텀 세션 사용
-            client = Client(request_timeout=30, session=session)
-            projects = list(client.list_projects())
-            print(f"LangSmith 연결 성공! 프로젝트 {len(projects)}개 조회됨")
-        except Exception as e:
-            print(f"LangSmith 연결 실패: {e}")
-            print("LangSmith 트레이싱 비활성화 (API 연결 실패)")
-            os.environ["LANGCHAIN_TRACING_V2"] = "false"
-            os.environ["LANGSMITH_TRACING"] = "false"
 
 
 @asynccontextmanager
